@@ -12,8 +12,8 @@ TalkGo读书会笔记（TalkGo 读书会第一期：Linux 性能优化实战 by 
 ## 目标
 ### 笔记模式
 1. 关键概念
-2. 应用实战
-3. 问题延伸
+2. 分析方法
+3. 实战演练记录
 4. （其他记录）
 ### 阶段小结：
 0. **每阶段产出一篇不小于200字的总结**
@@ -30,11 +30,7 @@ TalkGo读书会笔记（TalkGo 读书会第一期：Linux 性能优化实战 by 
 1. 参加第一期读书会的所思、所想总结
 2. 对TalkGo读书会想说的话
 
-# 第0阶段课程
-《[ 开篇词 | 别再让Linux性能问题成为你的绊脚石](https://time.geekbang.org/column/article/68728)》
-
-
-《[01 | 如何学习Linux性能优化？](https://time.geekbang.org/column/article/69346)》
+## 第0阶段课程
 
 **一般的解决问题过程**：遇见问题上网查,用别人的方法多试几次就解决了。
 
@@ -42,14 +38,5 @@ TalkGo读书会笔记（TalkGo 读书会第一期：Linux 性能优化实战 by 
 
 **更好的方法**：首先理解应用程序和系统的少数几个基本原理，实战，建立起性能全局观，然后掌握一些必要的性能工具。
 
+## 第1阶段（CPU性能篇）[读书笔记](https://github.com/erenming/talkgo/blob/master/reading/Linux-perf/cpu-perf.md)
 
-# 第1阶段（CPU性能篇）[CPU读书笔记]()
-
-
-### 关键概念
-
-### 应用实战
-
-### 问题延伸
-
-### 其他
