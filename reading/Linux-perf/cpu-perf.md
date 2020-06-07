@@ -114,7 +114,7 @@ CPU使用率：除了空闲时间外的其他时间占总 CPU 时间的百分比
 - 排查僵尸进程
   1. 通过`pstree -aps 3084`找到僵尸进程3084的父进程，排查改父进程代码看是否存在未回收子进程的情况。
 
-### 09 | 基础篇：怎么理解Linux软中断？
+### 09-10 | 基础篇：怎么理解Linux软中断？
 
 中断：操作系统用来响应硬件设备请求的一种机制，它会打断进程的正常调度和执行，然后调用内核中的中断处理程序来响应设备的请求。
 
@@ -131,3 +131,73 @@ CPU使用率：除了空闲时间外的其他时间占总 CPU 时间的百分比
 注：其中TASKLET只运行一次就会结束 ，并且只在调用它的函数所在的 CPU 上运行。
 
 - 查看软中断的内核线程: `ps aux | grep softirq`
+
+##### 案例分析
+
+- 首先觉察命令行卡顿现象，`top`命令观察，似乎一切正常。但是发现软终端进程cpu占用略高有0.3。怀疑软中断可能有异常
+- 通过`watch -d cat /proc/softirqs`观察，发现`NET_RX`行中断次数存在迅速升高现象。需排查网络情况
+- 通过`sar -n DEV 1`查看网口流量情况，发现`eho0`网口的`rxpck/s`异常地高，需排查该网口
+- 通过`tcpdump -i eth0 -n tcp port 80`抓包分析，发现有大量来自`192.168.0.2`的SYN包，因此判定为SYN FLOOD攻击
+
+### 11 | 套路篇：如何迅速分析出系统CPU的瓶颈在哪里？（分析套路指南）
+
+##### CPU 性能指标总结
+
+<img src="https://raw.githubusercontent.com/erenming/image-pool/master/linux-perf/cpu-metrics.png" style="float:left; width:500px;height:300 px" />
+
+##### 指标->工具对照表
+
+<img src="https://raw.githubusercontent.com/erenming/image-pool/master/linux-perf/metrics-tool.png" style="float:left; width:600px;height:500 px" />
+
+##### 工具->指标对照表
+
+<img src="https://raw.githubusercontent.com/erenming/image-pool/master/linux-perf/tool-metrics.png" style="float:left; width:600px;height:500 px" />
+
+##### 分析思路流程指北
+
+<img src="https://raw.githubusercontent.com/erenming/image-pool/master/linux-perf/roadmap.png" style="float:left; width:600px;height:500 px" />
+
+### 12 | 套路篇：CPU 性能优化的几个思路（优化套路指南）
+
+#### 方法论
+
+问题检验法：
+
+- 首先，既然要做性能优化，那要怎么判断它是不是有效呢？特别是优化后，到底能提升多少性能呢？
+- 第二，性能问题通常不是独立的，如果有多个性能问题同时发生，你应该先优化哪一个呢？
+- 第三，提升性能的方法并不是唯一的，当有多种方法可以选择时，你会选用哪一种呢？是不是总选那个最大程度提升性能的方法就行了呢？
+
+##### 评估优化效果
+
+1. 确定性能的量化指标。
+2. 测试优化前的性能指标。
+3. 测试优化后的性能指标。
+
+且纬度不要单一，至少是应用和系统两个纬度。例如web应用，应用纬度为**延迟、吞吐量**，系统纬度为**cpu使用率**。
+
+测试指标期间应保持系统应用的隔离性，减少外部干扰。
+
+##### 常见优化方法
+
+1. 应用程序方面：遵循二八原则，排除所有不必要的工作，只保留最核心的逻辑。编译器优化，算法优化，异步处理，多线程代替多进程，缓存
+2. 系统方面：CPU绑定，CPU独占，优先级调整，为进程设置资源限制，中断负载均衡
+
+##### 注意：千万避免过早优化
+
+### 13-14|CPU答疑篇
+
+1. perf排查容器类进程时，看不到具体函数？
+
+> 容器的特殊性，找不到对应动态库。可通过以下方式解决。
+>
+> 1. 在容器内部运行 perf
+> 2. 指定符号路径为容器文件系统的路径，使用bindfs绑定
+> 3. 在容器外面把分析纪录保存下来，再去容器里查看结果
+
+2. 书籍推荐？
+
+> 《Systems Performance: Enterprise and the Cloud》
+
+##### 金句
+
+理解最基本的原理，再掌握性能分析的思路，然后再逐步深入，探究细节
