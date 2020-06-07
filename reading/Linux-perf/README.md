@@ -40,3 +40,5 @@ TalkGo读书会笔记（TalkGo 读书会第一期：Linux 性能优化实战 by 
 
 ## 第1阶段（CPU性能篇）[读书笔记](https://github.com/erenming/talkgo/blob/master/reading/Linux-perf/cpu-perf.md)
 
+## 第2阶段（内存/IO性能篇）[读书笔记](https://github.com/erenming/talkgo/blob/master/reading/Linux-perf/mem-io.md)
+
