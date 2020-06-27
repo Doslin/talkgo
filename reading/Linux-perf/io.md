@@ -152,3 +152,59 @@ pcstat： 查看日志文件在cache中大小
 7. 只有 7 号普通文件才会产生磁盘写，而它操作的文件路径是 /data/appendonly.aof，相应的系统调用包括 write 和 fdatasync。
 8. 通过redis相关命令排查发现是配置不合理appendfsync 是 always
 9. 观察Python 发现应用在查询接口中会调用 Redis 的 SADD 命令，这很可能是不合理使用缓存导致的。
+
+## 30 | 套路篇：如何迅速分析出系统I/O的瓶颈在哪里？
+
+#### 性能指标
+
+<img src="https://blog-1300816757.cos.ap-shanghai.myqcloud.com/img/io3.png"/>
+
+#### 指标 -> 工具
+
+<img src="https://blog-1300816757.cos.ap-shanghai.myqcloud.com/img/io4.png" style="float:left; width:600px;height:500 px" />
+
+#### 工具->指标
+
+<img src="https://blog-1300816757.cos.ap-shanghai.myqcloud.com/img/io5.png" style="float:left; width:600px;height:500 px" />
+
+#### 如何迅速分析 I/O 的性能瓶颈
+
+还是那句话，**找关联**。多种性能指标间都有一定的关联性，不要完全孤立的看待他们，想弄清楚性能指标的关联性，就要**通晓每种性能指标的工作原理**
+
+#### 排查思路
+
+<img src="https://blog-1300816757.cos.ap-shanghai.myqcloud.com/img/io6.png"/>
+
+## 31 | 套路篇：磁盘 I/O 性能优化的几个思路
+
+#### I/O基准测试
+
+fio可单独测试，配合blktrace记录磁盘编写，并用fio进行重放
+
+#### 应用程序优化
+
+1. 可以用追加写代替随机写，减少寻址开销，加快 I/O 写的速度。
+2. 可以借助缓存 I/O ，充分利用系统缓存，降低实际 I/O 的次数。
+3. 可以在应用程序内部构建自己的缓存，或者用 Redis 这类外部缓存系统。
+4. 在需要频繁读写同一块磁盘空间时，可以用 mmap 代替 read/write，减少内存的拷贝次数。
+5. 在需要同步写的场景中，尽量将写请求合并，而不是让每个请求都同步写入磁盘，即可以用 fsync() 取代 O_SYNC。
+6. 多个应用程序共享相同磁盘时，为了保证 I/O 不被某个应用完全占用，推荐你使用 cgroups 的 I/O 子系统，来限制进程 / 进程组的 IOPS 以及吞吐量。
+7. 在使用 CFQ 调度器时，可以用 ionice 来调整进程的 I/O 调度优先级，特别是提高核心应用的 I/O 优先级。
+
+#### 文件系统优化
+
+1. 根据实际负载场景的不同，选择最适合的文件系统。
+2. 优化文件系统的配置选项，包括文件系统的特性（如 ext_attr、dir_index）、日志模式（如 journal、ordered、writeback）、挂载选项（如 noatime）等等。
+3. 优化文件系统的缓存。
+   1. 优化 pdflush 脏页
+   2. 优化内核回收目录项缓存和索引节点缓存的倾向
+   3. 不需要持久化时，你还可以用内存文件系统 tmpfs，以获得更好的 I/O 性能 。
+
+#### 磁盘优化
+
+1. 换用性能更好的磁盘
+2. 使用 RAID ，把多块磁盘组合成一个逻辑磁盘
+3. 可以对应用程序的数据，进行磁盘级别的隔离。如日志、数据等
+4. 顺序读比较多的场景中，我们可以增大磁盘的预读数据
+5. 优化内核块设备 I/O 的选项，调整磁盘队列的长度 /sys/block/sdb/queue/nr_requests，适当增大队列长度，可以提升磁盘的吞吐量
+6. 磁盘本身出现硬件错误， dmesg查看排查日志
