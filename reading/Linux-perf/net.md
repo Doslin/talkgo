@@ -87,6 +87,13 @@ I/O 是非阻塞的，一个线程中就可以同时监控一批套接字的文�
 
 所有的进程都监听相同的接口，并且开启 SO_REUSEPORT 选项，由内核负责将请求负载均衡到这些监听进程中去。内核确保了只有一个进程被唤醒，就不会出现惊群问题了
 
+#### 应用层的网络协议优化思路
+
+- 使用长连接取代短连接，可以显著降低 TCP 建立连接的成本。在每秒请求次数较多时，这样做的效果非常明显。
+- 使用内存等方式，来缓存不常变化的数据，可以降低网络 I/O 次数，同时加快应用程序的响应速度。
+- 使用 Protocol Buffer 等序列化的方式，压缩网络 I/O 的数据量，可以提高应用程序的吞吐。
+- 使用 DNS 缓存、预取、HTTPDNS 等方式，减少 DNS 解析的延迟，也可以提升网络 I/O 的整体速度。
+
 #### C1000K问题
 
 硬件替代软件功能
@@ -166,3 +173,100 @@ DNS 服务通过资源记录的方式，来管理所有数据，它支持 A、CN
 >1. `time nslookup time.geekbang.org`发现解析不稳定，发现存在过慢情况，甚至超时
 >2. 怀疑，DNS 服务器本身有问题、客户端到 DNS 服务器的网络延迟比较大、DNS 请求或者响应包，在某些情况下被链路中的网络设备弄丢了。
 >3. `ping -c3 8.8.8.8`查看所用DNS服务的网络情况，发现较慢且存在丢包。断定为期间的网络问题
+
+## 38 | 案例篇：怎么使用 tcpdump 和 Wireshark 分析网络流量？
+
+#### 案例分析
+
+1. 使用`ping -c3 geektime.org`发现，发现3次请求平均30ms，但是总时间搞到11000ms。
+2. 怀疑域名解析有问题，`time nslookup geektime.org`发现域名解析也很快
+3. 使用tcpdump工具，`tcpdump -nn udp port 53 or host 35.190.27.188`发现期间有PTR请求存在5s延迟
+4. 通过禁用PTR解决。
+
+#### tcpdump快速上手
+
+<img src="https://raw.githubusercontent.com/erenming/image-pool/master/blog/net4.png"/>
+
+<img src="https://raw.githubusercontent.com/erenming/image-pool/master/blog/net5.png"/>
+
+#### 使用wireshark更加简单易懂
+
+一般使用tcpdump的`-w`选项将网络包保存下来，再使用wireshark查看。
+
+## 39 | 案例篇：怎么缓解 DDoS 攻击带来的性能下降问题？
+
+#### 案例分析
+
+1. 访问nginx服务超时了，之前都是正常的
+2. 使用`sar -n DEV 1`命令，发现PPS为2000多，而BPS则为1174KB，每个包只有50KB
+3. 使用`tcpdump -i eth0 -n tcp port 80`，发现大量syn包。判定为SYN Flood的DDOS攻击
+4. `netstat -n -p | grep SYN_REC | wc -l`，发现有193个，进一步证明
+
+#### 如何防御？
+
+内核调优：
+
+1. `net.ipv4.tcp_max_syn_backlog = 256`调大
+2. `net.ipv4.tcp_synack_retries = 1`减小
+3. `net.ipv4.tcp_syncookies = 1`开启
+
+交给专业的网络设备防火墙等：
+
+如在C10M中描述，使用DPDK、XDP等避免过长的协议栈直接判断过滤掉恶意流量
+
+## 40 | 案例篇：网络请求延迟变大了，我该怎么办？
+
+#### 案例分析
+
+1. 发现网络延迟变高，由于服务器关闭了ICMP。使用`hping3 -c 3 -S -p 80 192.168.0.30`测试tcp延迟，发现延迟确实太大
+2. 使用 traceroute，确认路由是否正确，并查看路由中每一跳网关的延迟。发现并无问题
+3. 使用`tcpdump -nn tcp port 8080 -w nginx.pcap`，下载到本地，用wireshark分析
+4. 分析返现客户端有40ms延迟，这正是延迟相应机制的体现。
+5. 使用`strace`，发现客户端只设置了`TCP_NODELAY`，确实开启了延迟访问
+6. 而这是只是客户端行为，不应该影响服务端。接着分析服务端
+7. 观察wireshark，第二个分组没跟前一个分组（697 号）一起发送，而是等到客户端对第一个分组的 ACK 后（1173 号）才发送。这是Nagle 算法，与延迟算法结合造成了延迟
+8. 通过查看nginx配置，发现`tcp_nodelay off;`，原因得以确认。
+
+#### 总结
+
+在发现网络延迟增大的情况后，你可以先从路由、网络包的收发、网络包的处理，再到应用程序等，从各个层级分析网络延迟，等到找出网络延迟的来源层级后，再深入定位瓶颈所在。
+
+## 41-42 | 案例篇：如何优化 NAT 性能？
+
+SystemTap：用以动态跟踪内核，它把用户提供的脚本，转换为内核模块来执行，用来监测和跟踪内核的行为。（监控很有用）
+
+分析 NAT 性能问题时，可以先从内核连接跟踪模块 conntrack 角度来分析，比如用 systemtap、perf、netstat 等工具，以及 proc 文件系统中的内核选项，来分析网络协议栈的行为；然后，通过内核选项调优、切换到无状态 NAT、使用 DPDK 等方式，进行实际优化。
+
+## 43 | 套路篇：网络性能优化的几个思路
+
+#### 网络有很多层，对不同测进行基准测试
+
+1. 网络接口层和网络层：每秒可处理的网络包数 PPS，就是它们最重要的性能指标（特别是在小包的情况下）。使用`pktgen` ，来测试 PPS 的性能
+2. 传输层：吞吐量（BPS）、连接数以及延迟，就是最重要的性能指标。iperf 或 netperf测试。网络包的大小，会直接影响这些指标的值。
+3. 应用层：吞吐量（BPS）、每秒请求数以及延迟等指标。wrk、ab
+
+<img src="https://raw.githubusercontent.com/erenming/image-pool/master/blog/net6.png"/>
+
+<img src="https://raw.githubusercontent.com/erenming/image-pool/master/blog/net7.png"/>
+
+#### 套接字方面思路
+
+- 增大每个套接字的缓冲区大小 net.core.optmem_max；
+- 增大套接字接收缓冲区大小 net.core.rmem_max 和发送缓冲区大小 net.core.wmem_max；
+- 增大 TCP 接收缓冲区大小 net.ipv4.tcp_rmem 和发送缓冲区大小 net.ipv4.tcp_wmem。
+
+#### 传输层优化思路
+
+<img src="https://blog-1300816757.cos.ap-shanghai.myqcloud.com/img/net8.png"/>
+
+#### 网络层
+
+第一种，从路由和转发的角度出发，调整下面的内核选项
+
+第二种，从分片的角度出发，最主要的是调整 MTU（Maximum Transmission Unit）的大小。
+
+第三种，从 ICMP 的角度出发，为了避免 ICMP 主机探测、ICMP Flood 等各种网络问题，你可以通过内核选项，来限制 ICMP 的行为。
+
+#### 链路层
+
+主要是优化网络包的收发、网络功能卸载以及网卡选项。
